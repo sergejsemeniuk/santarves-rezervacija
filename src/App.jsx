@@ -281,7 +281,7 @@ export default function CubeRoomBooking() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <div>
-                <h2>Rezervuoti kabinetą</h2>
+                <h2>Rezervuoti kubus</h2>
                 <p className="modal-sub">
                   {modal.locked
                     ? `${new Date(modal.date + "T00:00:00").toLocaleDateString(LOCALE, { weekday: "long", day: "numeric", month: "long" })}, ${modal.periodId} pamoka`
