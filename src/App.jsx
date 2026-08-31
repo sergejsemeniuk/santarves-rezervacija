@@ -187,12 +187,12 @@ export default function CubeRoomBooking() {
               <Box size={26} strokeWidth={2.2} />
             </div>
             <div>
-              <h1>Interaktyvių kubų kabinetas</h1>
+              <h1>IMO kubų rezervacijos sistema</h1>
               <p className="subtitle">Vienas kabinetas — bendras tvarkaraštis visiems mokytojams</p>
             </div>
           </div>
           <button className="quick-btn" onClick={openQuick}>
-            <Plus size={18} /> Greita rezervacija
+            <Plus size={18} /> Rezervuoti kubus
           </button>
         </div>
 
