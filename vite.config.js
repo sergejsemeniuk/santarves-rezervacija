@@ -5,5 +5,5 @@ import react from "@vitejs/plugin-react";
 // Для Netlify (или своего домена) оставь base: "/".
 export default defineConfig({
   plugins: [react()],
-  base: "/cube-room-booking/",
+  base: "/",
 });
