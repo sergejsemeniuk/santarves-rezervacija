@@ -347,10 +347,10 @@ export default function CubeRoomBooking() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="c-note">Pastaba (neprivaloma)</label>
+                <label htmlFor="c-note">Vieta (neprivaloma)</label>
                 <textarea
                   id="c-note"
-                  placeholder="Pamokos tema, pageidavimai…"
+                  placeholder="Pamokos vieta"
                   value={form.note}
                   onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
                 />
