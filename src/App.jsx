@@ -10,9 +10,10 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 
-const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8].map((id) => ({ id }));
-const WEEKDAY_LABELS = ["Пн", "Вт", "Ср", "Чт", "Пт"];
+const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((id) => ({ id }));
+const WEEKDAY_LABELS = ["Pr", "An", "Tr", "Kt", "Pn"];
 const BOOKINGS_COLLECTION = "bookings";
+const LOCALE = "lt-LT";
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -38,17 +39,17 @@ function addDays(d, n) {
 }
 
 function formatShort(d) {
-  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  return d.toLocaleDateString(LOCALE, { day: "numeric", month: "short" });
 }
 
 function formatRange(monday) {
   const friday = addDays(monday, 4);
   const sameMonth = monday.getMonth() === friday.getMonth();
-  const startStr = monday.toLocaleDateString("ru-RU", {
+  const startStr = monday.toLocaleDateString(LOCALE, {
     day: "numeric",
     month: sameMonth ? undefined : "long",
   });
-  const endStr = friday.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+  const endStr = friday.toLocaleDateString(LOCALE, { day: "numeric", month: "long", year: "numeric" });
   return `${startStr} – ${endStr}`;
 }
 
@@ -68,10 +69,13 @@ export default function CubeRoomBooking() {
   const [connectionError, setConnectionError] = useState(false);
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
   const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({ teacher: "", className: "", note: "" });
+  const [form, setForm] = useState({ teacher: "", className: "", note: "", pin: "" });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelPin, setCancelPin] = useState("");
+  const [cancelError, setCancelError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -85,6 +89,7 @@ export default function CubeRoomBooking() {
             teacher: data.teacher,
             className: data.className,
             note: data.note || "",
+            pin: data.pin,
           };
         });
         setBookings(next);
@@ -105,13 +110,13 @@ export default function CubeRoomBooking() {
   );
 
   const openCell = (date, periodId) => {
-    setForm({ teacher: "", className: "", note: "" });
+    setForm({ teacher: "", className: "", note: "", pin: "" });
     setFormError("");
     setModal({ date, periodId, locked: true });
   };
 
   const openQuick = () => {
-    setForm({ teacher: "", className: "", note: "" });
+    setForm({ teacher: "", className: "", note: "", pin: "" });
     setFormError("");
     setModal({ date: dateKey(weekDays[0].date), periodId: null, locked: false });
   };
@@ -127,19 +132,23 @@ export default function CubeRoomBooking() {
     const { date, periodId } = modal;
 
     if (!date || !isWeekday(date)) {
-      setFormError("Кабинет доступен только по будням.");
+      setFormError("Kabinetas prieinamas tik darbo dienomis.");
       return;
     }
     if (!periodId) {
-      setFormError("Выберите урок.");
+      setFormError("Pasirinkite pamoką.");
       return;
     }
     if (!form.teacher.trim() || !form.className.trim()) {
-      setFormError("Укажите имя учителя и класс.");
+      setFormError("Nurodykite mokytojo vardą ir klasę.");
+      return;
+    }
+    if (!/^\d{4}$/.test(form.pin.trim())) {
+      setFormError("Atšaukimo kodas — 4 skaitmenys, sugalvokite bet kokius.");
       return;
     }
     if ((bookings[date] || {})[periodId]) {
-      setFormError("Это время уже занято — выберите другое.");
+      setFormError("Šis laikas jau užimtas — pasirinkite kitą.");
       return;
     }
 
@@ -151,24 +160,38 @@ export default function CubeRoomBooking() {
         teacher: form.teacher.trim(),
         className: form.className.trim(),
         note: form.note.trim(),
+        pin: form.pin.trim(),
         createdAt: serverTimestamp(),
       });
       setModal(null);
     } catch (err) {
-      setFormError("Не удалось сохранить бронь. Проверьте подключение и попробуйте снова.");
+      setFormError("Nepavyko išsaugoti rezervacijos. Patikrinkite ryšį ir bandykite dar kartą.");
     } finally {
       setSaving(false);
     }
   };
 
+  const openCancel = (date, periodId, entry) => {
+    setCancelTarget({ date, periodId, entry });
+    setCancelPin("");
+    setCancelError("");
+  };
+
   const confirmCancel = async () => {
     if (!cancelTarget) return;
+    if (cancelPin.trim() !== String(cancelTarget.entry.pin || "")) {
+      setCancelError("Neteisingas atšaukimo kodas.");
+      return;
+    }
+    setCancelling(true);
     try {
       await deleteDoc(doc(db, BOOKINGS_COLLECTION, docId(cancelTarget.date, cancelTarget.periodId)));
+      setCancelTarget(null);
     } catch (err) {
-      // если удаление не удалось, слот просто останется занятым — пользователь увидит это в сетке
+      setCancelError("Nepavyko atšaukti rezervacijos. Patikrinkite ryšį ir bandykite dar kartą.");
+    } finally {
+      setCancelling(false);
     }
-    setCancelTarget(null);
   };
 
   const todayKey = dateKey(new Date());
@@ -182,24 +205,24 @@ export default function CubeRoomBooking() {
               <Box size={26} strokeWidth={2.2} />
             </div>
             <div>
-              <h1>Кабинет интерактивных кубов</h1>
-              <p className="subtitle">Один кабинет — общее расписание для всех учителей</p>
+              <h1>Interaktyvių kubų kabinetas</h1>
+              <p className="subtitle">Vienas kabinetas — bendras tvarkaraštis visiems mokytojams</p>
             </div>
           </div>
           <button className="quick-btn" onClick={openQuick}>
-            <Plus size={18} /> Быстрая бронь
+            <Plus size={18} /> Greita rezervacija
           </button>
         </div>
 
         <div className="nav-row">
           <div className="nav-btns">
-            <button className="icon-btn" onClick={() => setWeekStart((w) => addDays(w, -7))} aria-label="Предыдущая неделя">
+            <button className="icon-btn" onClick={() => setWeekStart((w) => addDays(w, -7))} aria-label="Ankstesnė savaitė">
               <ChevronLeft size={18} />
             </button>
             <button className="today-btn" onClick={() => setWeekStart(getMonday(new Date()))}>
-              Сегодня
+              Šiandien
             </button>
-            <button className="icon-btn" onClick={() => setWeekStart((w) => addDays(w, 7))} aria-label="Следующая неделя">
+            <button className="icon-btn" onClick={() => setWeekStart((w) => addDays(w, 7))} aria-label="Kita savaitė">
               <ChevronRight size={18} />
             </button>
           </div>
@@ -208,12 +231,12 @@ export default function CubeRoomBooking() {
 
         {connectionError && (
           <div className="form-error" style={{ marginBottom: 16 }}>
-            Не удалось подключиться к базе данных. Проверьте настройки Firebase в src/firebase.js и правила доступа Firestore.
+            Nepavyko prisijungti prie duomenų bazės. Patikrinkite Firebase nustatymus faile src/firebase.js ir Firestore prieigos taisykles.
           </div>
         )}
 
         {loading ? (
-          <div className="empty-hint">Загружаем расписание…</div>
+          <div className="empty-hint">Kraunamas tvarkaraštis…</div>
         ) : (
           <div className="grid-scroll">
             <table>
@@ -235,7 +258,7 @@ export default function CubeRoomBooking() {
                 {PERIODS.map((p) => (
                   <tr key={p.id}>
                     <td className="period-col">
-                      <span className="p-num">{p.id} урок</span>
+                      <span className="p-num">{p.id} pamoka</span>
                     </td>
                     {weekDays.map((w) => {
                       const key = dateKey(w.date);
@@ -245,13 +268,13 @@ export default function CubeRoomBooking() {
                           {entry ? (
                             <button
                               className="cell-booked"
-                              onClick={() => setCancelTarget({ date: key, periodId: p.id, entry })}
+                              onClick={() => openCancel(key, p.id, entry)}
                             >
                               <span className="teacher">{entry.teacher}</span>
                               <span className="cls">{entry.className}</span>
                             </button>
                           ) : (
-                            <button className="cell-empty" onClick={() => openCell(key, p.id)} aria-label="Забронировать">
+                            <button className="cell-empty" onClick={() => openCell(key, p.id)} aria-label="Rezervuoti">
                               <Plus size={18} />
                             </button>
                           )}
@@ -266,8 +289,8 @@ export default function CubeRoomBooking() {
         )}
 
         <div className="legend">
-          <span><span className="swatch free"></span>Свободно</span>
-          <span><span className="swatch busy"></span>Занято</span>
+          <span><span className="swatch free"></span>Laisva</span>
+          <span><span className="swatch busy"></span>Užimta</span>
         </div>
       </div>
 
@@ -276,14 +299,14 @@ export default function CubeRoomBooking() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <div>
-                <h2>Забронировать кабинет</h2>
+                <h2>Rezervuoti kabinetą</h2>
                 <p className="modal-sub">
                   {modal.locked
-                    ? `${new Date(modal.date + "T00:00:00").toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}, ${modal.periodId} урок`
-                    : "Выберите день и урок"}
+                    ? `${new Date(modal.date + "T00:00:00").toLocaleDateString(LOCALE, { weekday: "long", day: "numeric", month: "long" })}, ${modal.periodId} pamoka`
+                    : "Pasirinkite dieną ir pamoką"}
                 </p>
               </div>
-              <button className="close-x" onClick={() => setModal(null)} aria-label="Закрыть">
+              <button className="close-x" onClick={() => setModal(null)} aria-label="Uždaryti">
                 <X size={16} />
               </button>
             </div>
@@ -292,7 +315,7 @@ export default function CubeRoomBooking() {
               {!modal.locked && (
                 <div className="two-col">
                   <div className="field">
-                    <label htmlFor="c-date">Дата</label>
+                    <label htmlFor="c-date">Data</label>
                     <input
                       id="c-date"
                       type="date"
@@ -301,19 +324,19 @@ export default function CubeRoomBooking() {
                     />
                   </div>
                   <div className="field">
-                    <label htmlFor="c-period">Урок</label>
+                    <label htmlFor="c-period">Pamoka</label>
                     <select
                       id="c-period"
                       value={modal.periodId || ""}
                       onChange={(e) => setModal((m) => ({ ...m, periodId: Number(e.target.value) }))}
                     >
                       <option value="" disabled>
-                        Выбрать
+                        Pasirinkti
                       </option>
                       {isWeekday(modal.date) &&
                         freePeriodsForDate(modal.date).map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.id} урок
+                            {p.id} pamoka
                           </option>
                         ))}
                     </select>
@@ -322,43 +345,58 @@ export default function CubeRoomBooking() {
               )}
 
               <div className="field">
-                <label htmlFor="c-teacher">Учитель</label>
+                <label htmlFor="c-teacher">Mokytojas</label>
                 <input
                   id="c-teacher"
                   type="text"
-                  placeholder="Например, Ирина Петрова"
+                  placeholder="Pvz., Rūta Petraitienė"
                   value={form.teacher}
                   onChange={(e) => setForm((f) => ({ ...f, teacher: e.target.value }))}
                 />
               </div>
               <div className="field">
-                <label htmlFor="c-class">Класс</label>
+                <label htmlFor="c-class">Klasė</label>
                 <input
                   id="c-class"
                   type="text"
-                  placeholder="Например, 3А"
+                  placeholder="Pvz., 3A"
                   value={form.className}
                   onChange={(e) => setForm((f) => ({ ...f, className: e.target.value }))}
                 />
               </div>
               <div className="field">
-                <label htmlFor="c-note">Заметка (необязательно)</label>
+                <label htmlFor="c-note">Pastaba (neprivaloma)</label>
                 <textarea
                   id="c-note"
-                  placeholder="Тема занятия, пожелания…"
+                  placeholder="Pamokos tema, pageidavimai…"
                   value={form.note}
                   onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
                 />
+              </div>
+              <div className="field">
+                <label htmlFor="c-pin">Atšaukimo kodas (4 skaitmenys)</label>
+                <input
+                  id="c-pin"
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  placeholder="Pvz., 1234"
+                  value={form.pin}
+                  onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, "").slice(0, 4) }))}
+                />
+                <p className="modal-sub" style={{ margin: "6px 0 0" }}>
+                  Įsiminkite jį — jo prireiks, jei norėsite atšaukti rezervaciją.
+                </p>
               </div>
 
               {formError && <div className="form-error">{formError}</div>}
 
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={() => setModal(null)}>
-                  Отмена
+                  Atšaukti
                 </button>
                 <button type="submit" className="btn-primary" disabled={saving}>
-                  {saving ? "Сохраняем…" : "Забронировать"}
+                  {saving ? "Saugoma…" : "Rezervuoti"}
                 </button>
               </div>
             </form>
@@ -371,27 +409,43 @@ export default function CubeRoomBooking() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 340 }}>
             <div className="modal-head">
               <div>
-                <h2>Отменить бронь?</h2>
+                <h2>Atšaukti rezervaciją?</h2>
                 <p className="modal-sub">
                   <CalendarClock size={14} style={{ verticalAlign: -2, marginRight: 4 }} />
-                  {new Date(cancelTarget.date + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" })},{" "}
-                  {cancelTarget.periodId} урок
+                  {new Date(cancelTarget.date + "T00:00:00").toLocaleDateString(LOCALE, { day: "numeric", month: "long" })},{" "}
+                  {cancelTarget.periodId} pamoka
                 </p>
               </div>
-              <button className="close-x" onClick={() => setCancelTarget(null)} aria-label="Закрыть">
+              <button className="close-x" onClick={() => setCancelTarget(null)} aria-label="Uždaryti">
                 <X size={16} />
               </button>
             </div>
-            <p style={{ fontSize: 14, marginBottom: 20 }}>
-              Бронь: <span className="cancel-teacher">{cancelTarget.entry.teacher}</span>, {cancelTarget.entry.className}
+            <p style={{ fontSize: 14, marginBottom: 16 }}>
+              Rezervacija: <span className="cancel-teacher">{cancelTarget.entry.teacher}</span>, {cancelTarget.entry.className}
               {cancelTarget.entry.note ? ` — ${cancelTarget.entry.note}` : ""}
             </p>
+            <div className="field">
+              <label htmlFor="cancel-pin">Atšaukimo kodas</label>
+              <input
+                id="cancel-pin"
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="4 skaitmenys, nurodyti rezervuojant"
+                value={cancelPin}
+                onChange={(e) => {
+                  setCancelPin(e.target.value.replace(/\D/g, "").slice(0, 4));
+                  setCancelError("");
+                }}
+              />
+            </div>
+            {cancelError && <div className="form-error">{cancelError}</div>}
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setCancelTarget(null)}>
-                Оставить
+                Palikti
               </button>
-              <button className="btn-danger" onClick={confirmCancel}>
-                Отменить бронь
+              <button className="btn-danger" onClick={confirmCancel} disabled={cancelling}>
+                {cancelling ? "Atšaukiama…" : "Atšaukti rezervaciją"}
               </button>
             </div>
           </div>
