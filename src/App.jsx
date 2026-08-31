@@ -69,12 +69,10 @@ export default function CubeRoomBooking() {
   const [connectionError, setConnectionError] = useState(false);
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
   const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({ teacher: "", className: "", note: "", pin: "" });
+  const [form, setForm] = useState({ teacher: "", className: "", note: "" });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [cancelTarget, setCancelTarget] = useState(null);
-  const [cancelPin, setCancelPin] = useState("");
-  const [cancelError, setCancelError] = useState("");
   const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
@@ -89,7 +87,6 @@ export default function CubeRoomBooking() {
             teacher: data.teacher,
             className: data.className,
             note: data.note || "",
-            pin: data.pin,
           };
         });
         setBookings(next);
@@ -110,13 +107,13 @@ export default function CubeRoomBooking() {
   );
 
   const openCell = (date, periodId) => {
-    setForm({ teacher: "", className: "", note: "", pin: "" });
+    setForm({ teacher: "", className: "", note: "" });
     setFormError("");
     setModal({ date, periodId, locked: true });
   };
 
   const openQuick = () => {
-    setForm({ teacher: "", className: "", note: "", pin: "" });
+    setForm({ teacher: "", className: "", note: "" });
     setFormError("");
     setModal({ date: dateKey(weekDays[0].date), periodId: null, locked: false });
   };
@@ -143,10 +140,6 @@ export default function CubeRoomBooking() {
       setFormError("Nurodykite mokytojo vardą ir klasę.");
       return;
     }
-    if (!/^\d{4}$/.test(form.pin.trim())) {
-      setFormError("Atšaukimo kodas — 4 skaitmenys, sugalvokite bet kokius.");
-      return;
-    }
     if ((bookings[date] || {})[periodId]) {
       setFormError("Šis laikas jau užimtas — pasirinkite kitą.");
       return;
@@ -160,7 +153,6 @@ export default function CubeRoomBooking() {
         teacher: form.teacher.trim(),
         className: form.className.trim(),
         note: form.note.trim(),
-        pin: form.pin.trim(),
         createdAt: serverTimestamp(),
       });
       setModal(null);
@@ -171,24 +163,14 @@ export default function CubeRoomBooking() {
     }
   };
 
-  const openCancel = (date, periodId, entry) => {
-    setCancelTarget({ date, periodId, entry });
-    setCancelPin("");
-    setCancelError("");
-  };
-
   const confirmCancel = async () => {
     if (!cancelTarget) return;
-    if (cancelPin.trim() !== String(cancelTarget.entry.pin || "")) {
-      setCancelError("Neteisingas atšaukimo kodas.");
-      return;
-    }
     setCancelling(true);
     try {
       await deleteDoc(doc(db, BOOKINGS_COLLECTION, docId(cancelTarget.date, cancelTarget.periodId)));
       setCancelTarget(null);
     } catch (err) {
-      setCancelError("Nepavyko atšaukti rezervacijos. Patikrinkite ryšį ir bandykite dar kartą.");
+      // rezervacija liks užimta — vartotojas tai pamatys tvarkaraštyje
     } finally {
       setCancelling(false);
     }
@@ -268,7 +250,7 @@ export default function CubeRoomBooking() {
                           {entry ? (
                             <button
                               className="cell-booked"
-                              onClick={() => openCancel(key, p.id, entry)}
+                              onClick={() => setCancelTarget({ date: key, periodId: p.id, entry })}
                             >
                               <span className="teacher">{entry.teacher}</span>
                               <span className="cls">{entry.className}</span>
@@ -373,21 +355,6 @@ export default function CubeRoomBooking() {
                   onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
                 />
               </div>
-              <div className="field">
-                <label htmlFor="c-pin">Atšaukimo kodas (4 skaitmenys)</label>
-                <input
-                  id="c-pin"
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  placeholder="Pvz., 1234"
-                  value={form.pin}
-                  onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, "").slice(0, 4) }))}
-                />
-                <p className="modal-sub" style={{ margin: "6px 0 0" }}>
-                  Įsiminkite jį — jo prireiks, jei norėsite atšaukti rezervaciją.
-                </p>
-              </div>
 
               {formError && <div className="form-error">{formError}</div>}
 
@@ -420,26 +387,10 @@ export default function CubeRoomBooking() {
                 <X size={16} />
               </button>
             </div>
-            <p style={{ fontSize: 14, marginBottom: 16 }}>
+            <p style={{ fontSize: 14, marginBottom: 20 }}>
               Rezervacija: <span className="cancel-teacher">{cancelTarget.entry.teacher}</span>, {cancelTarget.entry.className}
               {cancelTarget.entry.note ? ` — ${cancelTarget.entry.note}` : ""}
             </p>
-            <div className="field">
-              <label htmlFor="cancel-pin">Atšaukimo kodas</label>
-              <input
-                id="cancel-pin"
-                type="password"
-                inputMode="numeric"
-                maxLength={4}
-                placeholder="4 skaitmenys, nurodyti rezervuojant"
-                value={cancelPin}
-                onChange={(e) => {
-                  setCancelPin(e.target.value.replace(/\D/g, "").slice(0, 4));
-                  setCancelError("");
-                }}
-              />
-            </div>
-            {cancelError && <div className="form-error">{cancelError}</div>}
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setCancelTarget(null)}>
                 Palikti
