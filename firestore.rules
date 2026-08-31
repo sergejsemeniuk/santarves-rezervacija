@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Открытый доступ без входа в аккаунт — как и было задумано:
+    // любой учитель по ссылке может видеть, создавать и отменять брони.
+    // Изменение существующей брони запрещено — только создание нового
+    // документа на свободный слот или его удаление (отмена).
+    match /bookings/{bookingId} {
+      allow read: if true;
+      allow create, delete: if true;
+      allow update: if false;
+    }
+  }
+}
